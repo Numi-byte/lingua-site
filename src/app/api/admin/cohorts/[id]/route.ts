@@ -2,10 +2,9 @@ export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { extractPriceId } from '@/lib/priceUtils'
 
-/**
- * GET /api/admin/cohorts/[id]
- */
+/** GET one */
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params
   const db = supabaseAdmin()
@@ -15,90 +14,65 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   return NextResponse.json({ data })
 }
 
-/**
- * PUT /api/admin/cohorts/[id]
- * Accepts partial updates. If days/start_time/start_date/level change,
- * we recompute label & schedule on the server for consistency.
- */
+/** PUT update (sanitizes price_id; recomputes label/schedule if timing fields change) */
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params
-  const payload = (await req.json()) as Partial<{
+  const body = (await req.json()) as Partial<{
+    label: string
     language: 'Italian' | 'German'
     level: 'A1' | 'A2' | 'B1' | 'B2' | 'C1'
     start_date: string
-    days: string[]                  // ['Mon','Wed',...]
-    start_time: string              // 'HH:MM'
-    duration_min: number
+    days: string[]
+    start_time: string
     timezone: string
+    duration_min: number
     capacity: number
     status: 'open' | 'closed' | 'finished'
-    price_id: string
+    price_id: string | null
   }>
 
   const db = supabaseAdmin()
-
-  // Load current row (needed for recompute)
   const { data: current, error: curErr } = await db.from('cohorts').select('*').eq('id', id).maybeSingle()
   if (curErr) return NextResponse.json({ error: curErr.message }, { status: 400 })
   if (!current) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // Build next state to decide if label/schedule must be recomputed
-  const next = { ...current, ...payload }
+  // sanitize price_id if present
+  const cleanPrice = Object.prototype.hasOwnProperty.call(body, 'price_id')
+    ? extractPriceId(body.price_id as any)
+    : undefined
 
-  // Validate days/time if provided
-  const WD = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] as const
-  type Wd = typeof WD[number]
-  let daysValid: Wd[] | undefined
-  if (Array.isArray(payload.days)) {
-    daysValid = payload.days.filter((d): d is Wd => (WD as readonly string[]).includes(d))
-    if (daysValid.length === 0) {
-      return NextResponse.json({ error: 'days must include at least one weekday' }, { status: 400 })
-    }
+  const next = { ...current, ...body, ...(cleanPrice !== undefined ? { price_id: cleanPrice } : {}) }
+
+  // recompute label/schedule if key fields change and label not explicitly provided
+  const recompute = ['level', 'start_date', 'days', 'start_time', 'timezone'].some(k => k in body) && !('label' in body)
+  const update: Record<string, unknown> = {
+    ...body,
+    ...(cleanPrice !== undefined ? { price_id: cleanPrice } : {}),
   }
-
-  if (payload.start_time && !/^\d{2}:\d{2}$/.test(payload.start_time)) {
-    return NextResponse.json({ error: 'start_time must be HH:MM' }, { status: 400 })
-  }
-
-  // Decide whether to recompute label & schedule (if any of these changed)
-  const recompute =
-    typeof payload.level !== 'undefined' ||
-    typeof payload.start_date !== 'undefined' ||
-    typeof payload.start_time !== 'undefined' ||
-    typeof payload.days !== 'undefined' ||
-    typeof payload.timezone !== 'undefined'
-
-  const update: Record<string, unknown> = { ...payload }
 
   if (recompute) {
-    const level = (next.level ?? current.level) as string
-    const start_date = (next.start_date ?? current.start_date) as string | null
-    const start_time = (next.start_time ?? current.start_time) as string | null
-    const timezone = (next.timezone ?? current.timezone ?? 'Europe/Rome') as string
-    const days: string[] = daysValid ?? (Array.isArray(next.days) ? next.days : (current.days ?? []))
+    const level = next.level
+    const start_date = next.start_date
+    const start_time = next.start_time
+    const days = Array.isArray(next.days) ? next.days : []
+    const tz = next.timezone || 'Europe/Rome'
 
     if (!start_date || !start_time || days.length === 0) {
       return NextResponse.json({ error: 'start_date, start_time and days are required to recompute schedule' }, { status: 400 })
     }
 
-    update['label'] = makeLabel(level, start_date, days, start_time)
-    update['schedule'] = `${joinDays(days)} · ${start_time} (${timezone}) · Online`
+    update['label'] = `${level} ${fmtMonthDay(start_date)} · ${joinDays(days)} ${start_time}`
+    update['schedule'] = `${joinDays(days)} · ${start_time} (${tz}) · Online`
   }
 
-  // Normalize capacity if provided
-  if (typeof payload.capacity === 'number') {
-    update['capacity'] = Math.max(0, payload.capacity)
-  }
+  if (typeof body.capacity === 'number') update['capacity'] = Math.max(0, body.capacity)
 
   const { error: upErr } = await db.from('cohorts').update(update).eq('id', id)
   if (upErr) return NextResponse.json({ error: upErr.message }, { status: 400 })
-
   return NextResponse.json({ ok: true })
 }
 
-/**
- * DELETE /api/admin/cohorts/[id]
- */
+/** DELETE */
 export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params
   const db = supabaseAdmin()
@@ -107,18 +81,10 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   return NextResponse.json({ ok: true })
 }
 
-/* ---------------- helpers ---------------- */
-
-function makeLabel(level: string, isoDate: string, days: string[], time: string) {
-  return `${level} ${fmtMonthDay(isoDate)} · ${joinDays(days)} ${time}`
-}
+/* helpers */
 function fmtMonthDay(iso: string) {
-  try {
-    return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, {
-      month: 'short',
-      day: '2-digit',
-    })
-  } catch { return iso }
+  try { return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: '2-digit' }) }
+  catch { return iso }
 }
 function joinDays(days: string[]) {
   if (days.length === 1) return days[0]

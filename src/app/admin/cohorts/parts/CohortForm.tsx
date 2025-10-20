@@ -1,22 +1,49 @@
 'use client'
+
 import { useMemo, useState } from 'react'
 import { CalendarClock, Save } from 'lucide-react'
 
 const WEEKDAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] as const
 type Wd = typeof WEEKDAYS[number]
+type Status = 'open'|'closed'|'finished'
 
-export default function CohortForm() {
-  const [language, setLanguage] = useState<'Italian'|'German'>('Italian')
-  const [level, setLevel] = useState<'A1'|'A2'|'B1'|'B2'|'C1'>('A1')
-  const [startDate, setStartDate] = useState('')
-  const [days, setDays] = useState<Wd[]>(['Mon','Wed'])
-  const [time, setTime] = useState('19:00')
-  const [duration, setDuration] = useState(60)
-  const [timezone, setTimezone] = useState('Europe/Rome')
-  const [capacity, setCapacity] = useState(8)
-  const [priceId, setPriceId] = useState('')
-  const [status, setStatus] = useState<'open'|'closed'|'finished'>('open')
-  const [saving, setSaving] = useState(false)
+/** Build price options from env – VALUE is the raw price id only */
+const PRICE_OPTIONS: { label: string; id: string | null }[] = [
+  { label: '— No price (draft)', id: null },
+  { label: `A1 — ${process.env.NEXT_PUBLIC_PRICE_A1 ?? 'missing'}`, id: process.env.NEXT_PUBLIC_PRICE_A1 ?? null },
+  { label: `A2 — ${process.env.NEXT_PUBLIC_PRICE_A2 ?? 'missing'}`, id: process.env.NEXT_PUBLIC_PRICE_A2 ?? null },
+  { label: `B1 — ${process.env.NEXT_PUBLIC_PRICE_B1 ?? 'missing'}`, id: process.env.NEXT_PUBLIC_PRICE_B1 ?? null },
+  { label: `B2 — ${process.env.NEXT_PUBLIC_PRICE_B2 ?? 'missing'}`, id: process.env.NEXT_PUBLIC_PRICE_B2 ?? null },
+  { label: `Weekend Pronunciation — ${process.env.NEXT_PUBLIC_PRICE_WEEKEND_PRON ?? 'missing'}`, id: process.env.NEXT_PUBLIC_PRICE_WEEKEND_PRON ?? null },
+  { label: `Free Class — ${process.env.NEXT_PUBLIC_PRICE_FREECLASS ?? 'missing'}`, id: process.env.NEXT_PUBLIC_PRICE_FREECLASS ?? null },
+].filter(o => o.id === null || o.id?.startsWith('price_') || o.id?.startsWith('pr_'))
+
+/** Clean up anything like "NEXT_PUBLIC_PRICE_A1=price_123" → "price_123" */
+function extractPriceId(input?: string | null): string | null {
+  if (!input) return null
+  const s = String(input).trim()
+  const candidate = s.includes('=') ? s.slice(s.lastIndexOf('=') + 1).trim() : s
+  if (candidate.startsWith('price_') || candidate.startsWith('pr_')) return candidate
+  return null
+}
+
+type Props = {
+  onSaved?: () => void
+}
+
+export default function CohortForm({ onSaved }: Props) {
+  const [language, setLanguage]   = useState<'Italian'|'German'>('Italian')
+  const [level, setLevel]         = useState<'A1'|'A2'|'B1'|'B2'|'C1'>('A1')
+  const [startDate, setStartDate] = useState('')          // yyyy-mm-dd
+  const [days, setDays]           = useState<Wd[]>(['Mon','Wed'])
+  const [time, setTime]           = useState('19:00')     // HH:MM 24h
+  const [duration, setDuration]   = useState(60)          // minutes
+  const [timezone, setTimezone]   = useState('Europe/Rome')
+  const [capacity, setCapacity]   = useState(8)
+  const [priceId, setPriceId]     = useState<string>('')  // raw price id typed/pasted
+  const [status, setStatus]       = useState<Status>('open')
+  const [saving, setSaving]       = useState(false)
+  const [errors, setErrors]       = useState<string[]>([])
 
   // Preview label/schedule (server will compute authoritative value too)
   const preview = useMemo(() => {
@@ -28,16 +55,38 @@ export default function CohortForm() {
   }, [level, startDate, days, time, timezone])
 
   function toggleDay(d: Wd) {
-    setDays(prev => prev.includes(d) ? prev.filter(x=>x!==d) : [...prev, d])
+    setDays(prev => {
+      if (prev.includes(d)) return prev.filter(x=>x!==d)
+      if (prev.length >= 3) return prev // limit: 1–3 days
+      return [...prev, d]
+    })
+  }
+
+  function validate(): string[] {
+    const errs: string[] = []
+    if (!startDate) errs.push('Choose a start date.')
+    else {
+      const today = new Date(); today.setHours(0,0,0,0)
+      const sd = new Date(startDate + 'T00:00:00')
+      if (sd < today) errs.push('Start date must be today or later.')
+    }
+    if (!/^\d{2}:\d{2}$/.test(time)) errs.push('Start time must be HH:MM (24h).')
+    if (days.length === 0) errs.push('Pick at least one weekday (max 3).')
+    if (duration < 30 || duration > 180) errs.push('Duration must be between 30–180 minutes.')
+    if (capacity < 0 || capacity > 1000) errs.push('Capacity must be between 0–1000.')
+    const cleaned = extractPriceId(priceId)
+    if (!cleaned) errs.push('Enter a valid Stripe price id (price_...).')
+    return errs
   }
 
   async function submit() {
-    if (!startDate) return alert('Choose a start date')
-    if (!priceId) return alert('Enter Stripe price_id (price_...)')
-    if (days.length === 0) return alert('Pick at least one weekday')
+    const errs = validate()
+    setErrors(errs)
+    if (errs.length) return
 
     setSaving(true)
     try {
+      const cleaned = extractPriceId(priceId)
       const res = await fetch('/api/admin/cohorts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -45,19 +94,22 @@ export default function CohortForm() {
           language,
           level,
           start_date: startDate,
-          days,                    // <-- structured
+          days,                    // structured array
           start_time: time,        // 'HH:MM'
           duration_min: duration,  // number
           timezone,
           capacity,
           status,
-          price_id: priceId,
+          price_id: cleaned,       // raw price id only
         }),
       })
-      if (!res.ok) throw new Error((await res.json()).error || 'Failed')
-      location.reload()
+      const j = await res.json().catch(()=> ({}))
+      if (!res.ok) throw new Error(j.error || 'Failed to create cohort')
+      onSaved?.()
+      // Fallback if no callback provided
+      if (!onSaved) location.reload()
     } catch (e: any) {
-      alert(e.message || 'Error')
+      setErrors([e.message || 'Error creating cohort'])
     } finally {
       setSaving(false)
     }
@@ -65,6 +117,15 @@ export default function CohortForm() {
 
   return (
     <div className="rounded-2xl border border-black/10 bg-white/70 p-4">
+      {/* validation summary */}
+      {errors.length > 0 && (
+        <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <ul className="list-disc pl-5 space-y-1">
+            {errors.map((e,i)=>(<li key={i}>{e}</li>))}
+          </ul>
+        </div>
+      )}
+
       <div className="grid gap-3 md:grid-cols-3">
         {/* Language */}
         <div>
@@ -90,18 +151,28 @@ export default function CohortForm() {
 
         {/* Weekdays */}
         <div className="md:col-span-2">
-          <label className="label">Days (pick 1–3)</label>
+          <div className="flex items-center justify-between">
+            <label className="label">Days</label>
+            <div className="text-xs text-neutral-500">{days.length}/3 selected</div>
+          </div>
           <div className="flex flex-wrap gap-2">
-            {WEEKDAYS.map(d => (
-              <button
-                key={d}
-                type="button"
-                onClick={()=>toggleDay(d)}
-                className={`btn ${days.includes(d) ? 'btn-primary' : 'btn-ghost'}`}
-              >
-                {d}
-              </button>
-            ))}
+            {WEEKDAYS.map(d => {
+              const active = days.includes(d)
+              const disabled = !active && days.length >= 3
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  aria-pressed={active}
+                  aria-label={`Toggle ${d}`}
+                  onClick={()=>toggleDay(d)}
+                  className={`btn ${active ? 'btn-primary' : 'btn-ghost'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  disabled={disabled}
+                >
+                  {d}
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -112,27 +183,85 @@ export default function CohortForm() {
         </div>
         <div>
           <label className="label">Duration (minutes)</label>
-          <input type="number" className="input" value={duration} onChange={e=>setDuration(Number(e.target.value)||60)} />
+          <input
+            type="number"
+            className="input"
+            min={30}
+            max={180}
+            step={5}
+            value={duration}
+            onChange={e=>setDuration(Number(e.target.value)||60)}
+          />
         </div>
         <div>
           <label className="label">Timezone</label>
-          <input className="input" value={timezone} onChange={e=>setTimezone(e.target.value)} placeholder="Europe/Rome" />
+          <input
+            className="input"
+            list="tz-list"
+            value={timezone}
+            onChange={e=>setTimezone(e.target.value)}
+            placeholder="Europe/Rome"
+          />
+          <datalist id="tz-list">
+            <option value="Europe/Rome" />
+            <option value="Europe/Berlin" />
+            <option value="UTC" />
+          </datalist>
         </div>
 
-        {/* Capacity / Status / Stripe */}
+        {/* Capacity / Status */}
         <div>
           <label className="label">Capacity</label>
-          <input type="number" className="input" value={capacity} onChange={e=>setCapacity(Number(e.target.value)||8)} />
+          <input
+            type="number"
+            className="input"
+            min={0}
+            max={1000}
+            value={capacity}
+            onChange={e=>setCapacity(Number(e.target.value)||0)}
+          />
         </div>
-        <div>
-          <label className="label">Status</label>
-          <select className="input" value={status} onChange={e=>setStatus(e.target.value as any)}>
-            <option>open</option><option>closed</option><option>finished</option>
-          </select>
+        <div className="md:col-span-2">
+          <label className="label mb-1 block">Status</label>
+          <div className="flex flex-wrap gap-2">
+            {(['open','closed','finished'] as Status[]).map(s => (
+              <button
+                key={s}
+                type="button"
+                aria-pressed={status===s}
+                onClick={()=>setStatus(s)}
+                className={`btn ${status===s ? 'btn-primary' : 'btn-ghost'}`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
         </div>
-        <div>
-          <label className="label">Stripe price_id</label>
-          <input className="input" value={priceId} onChange={e=>setPriceId(e.target.value)} placeholder="price_..." />
+
+        {/* Stripe price */}
+        <div className="md:col-span-3">
+          <label className="label">Stripe Price</label>
+          <div className="grid gap-2 md:grid-cols-[1fr_1fr]">
+            <select
+              className="input"
+              value={PRICE_OPTIONS.find(o=>o.id===extractPriceId(priceId))?.id ?? ''}
+              onChange={(e)=> setPriceId(e.target.value)}
+            >
+              {PRICE_OPTIONS.map(o => (
+                <option key={o.label} value={o.id ?? ''}>{o.label}</option>
+              ))}
+            </select>
+            <input
+              className="input"
+              value={priceId}
+              onChange={e=> setPriceId(e.target.value)}
+              placeholder="Paste price_… (we auto-clean KEY=price_…)"
+            />
+          </div>
+          <p className="text-xs text-neutral-500 mt-1">
+            We’ll store only the **raw** Stripe price id (e.g. <code>price_abc</code>). Pasting
+            <code className="mx-1">NEXT_PUBLIC_PRICE_A1=price_abc</code> is okay—it will be cleaned.
+          </p>
         </div>
       </div>
 
@@ -146,7 +275,7 @@ export default function CohortForm() {
       </div>
 
       <div className="mt-3">
-        <button className="btn btn-primary" onClick={submit} disabled={saving}>
+        <button className="btn btn-primary inline-flex items-center gap-2" onClick={submit} disabled={saving}>
           <Save size={16}/> {saving ? 'Saving…' : 'Create cohort'}
         </button>
       </div>

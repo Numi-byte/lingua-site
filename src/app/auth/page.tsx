@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabaseBrowser } from '@/lib/supabaseClient'
 import Link from 'next/link'
 
@@ -12,16 +12,18 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false)
   const [serverAuth, setServerAuth] = useState<{ authenticated: boolean; email: string | null } | null>(null)
 
-  // Ask SERVER if it sees a session; never redirect automatically
+  // Always use current origin to avoid www/apex mismatch
+  const origin = useMemo(() => (typeof window !== 'undefined' ? window.location.origin : process.env.NEXT_PUBLIC_SITE_URL || ''), [])
+  const redirectTo = `${origin}/auth/callback?next=%2Fauth%2Fafter`
+
   useEffect(() => {
-    fetch('/api/auth/status', { credentials: 'include' })
+    fetch('/api/auth/status', { credentials: 'include', cache: 'no-store' })
       .then(r => r.json())
       .then(setServerAuth)
       .catch(() => setServerAuth({ authenticated: false, email: null }))
   }, [])
 
   async function continueToApp() {
-    // Only go if server is authenticated
     location.href = '/auth/after'
   }
 
@@ -31,7 +33,7 @@ export default function AuthPage() {
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: { emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?next=%2Fauth%2Fafter` }
+        options: { emailRedirectTo: redirectTo },
       })
       if (error) throw error
       alert('Magic link sent! Check your email.')
@@ -49,14 +51,13 @@ export default function AuthPage() {
       if (mode === 'signup') {
         const { error } = await supabase.auth.signUp({
           email, password: pwd,
-          options: { emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?next=%2Fauth%2Fafter` }
+          options: { emailRedirectTo: redirectTo },
         })
         if (error) throw error
         alert('Check your email to confirm your account.')
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password: pwd })
         if (error) throw error
-        // Sync tokens into server cookies
         const { data: sess } = await supabase.auth.getSession()
         const at = sess.session?.access_token
         const rt = sess.session?.refresh_token
@@ -68,7 +69,6 @@ export default function AuthPage() {
             body: JSON.stringify({ access_token: at, refresh_token: rt }),
           })
         }
-        // Hard reload so server sees cookies
         location.href = '/auth/after'
       }
     } catch (e: any) {
@@ -83,10 +83,7 @@ export default function AuthPage() {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-          redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?next=%2Fauth%2Fafter`,
-          queryParams: { prompt: 'consent' },
-        },
+        options: { redirectTo: redirectTo, queryParams: { prompt: 'consent' } },
       })
       if (error) throw error
     } catch (e: any) {
@@ -106,10 +103,11 @@ export default function AuthPage() {
       <h1 className="text-xl font-semibold mb-1">Sign in</h1>
       <p className="text-sm text-neutral-600 mb-4">Magic link • Email+password • Google</p>
 
-      {/* If server already sees session, show a safe Continue button (no auto-redirect) */}
       {serverAuth?.authenticated && (
         <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm mb-4">
-          Signed in as <b>{serverAuth.email}</b>. <button className="underline ml-1" onClick={continueToApp}>Continue</button> · <button className="underline ml-1" onClick={fullSignOut}>Sign out</button>
+          Signed in as <b>{serverAuth.email}</b>.
+          <button className="underline ml-1" onClick={continueToApp}>Continue</button>
+          <button className="underline ml-2" onClick={fullSignOut}>Sign out</button>
         </div>
       )}
 
