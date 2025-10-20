@@ -1,8 +1,9 @@
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import LangSection from './parts/LangSections'
 import { Sparkles, AlertTriangle } from 'lucide-react'
-
-export const dynamic = 'force-dynamic'
 
 export default async function PricingPage() {
   const db = supabaseAdmin()

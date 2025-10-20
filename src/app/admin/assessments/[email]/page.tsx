@@ -1,54 +1,52 @@
-import { supabaseService } from '@/lib/supabaseService'
-
+export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export default async function AdminAssessmentDetail({ params }: { params: { email: string } }) {
-  const email = decodeURIComponent(params.email)
-  const db = supabaseService()
-  const { data, error } = await db
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
+
+type Params = Promise<{ email: string }>
+
+export default async function AdminAssessmentByEmailPage({ params }: { params: Params }) {
+  const { email } = await params
+
+  const db = supabaseAdmin()
+  const { data: asses } = await db
     .from('assessments')
-    .select('*')
+    .select('created_at,target_language,cefr_estimate,total_score,details')
     .eq('email', email)
     .order('created_at', { ascending: false })
 
-  if (error) return <div className="card p-6">DB error: {error.message}</div>
-
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Assessments — {email}</h1>
+      <section className="card p-6">
+        <h1 className="text-xl font-semibold">Assessments — {email}</h1>
+        <p className="text-sm text-neutral-600">
+          All assessment attempts for this learner.
+        </p>
+      </section>
 
-      {(data ?? []).map((row: any) => (
-        <div key={row.id} className="card p-6">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-neutral-600">{new Date(row.created_at).toLocaleString()}</div>
-            <div className="text-sm">Lang: <b>{row.target_language}</b> • CEFR: <b>{row.cefr_estimate}</b> • Score: <b>{row.total_score}</b></div>
-          </div>
-          <div className="grid gap-3 md:grid-cols-3 mt-3">
-            <Box title="Grammar & Vocab" body={`${row.answers?.gv?.score ?? 0} / ${row.answers?.gv?.max ?? 0}`} />
-            <Box title="Reading" body={`${row.answers?.reading?.score ?? 0} / ${row.answers?.reading?.max ?? 0}`} />
-            <Box title="Writing" body={`${row.answers?.writing?.score ?? 0} / ${row.answers?.writing?.max ?? 0}`} />
-          </div>
-          {row.answers?.writing?.text && (
-            <div className="mt-4">
-              <div className="text-xs text-neutral-500 mb-1">Writing sample</div>
-              <div className="rounded-xl border border-black/10 bg-white/70 p-3 text-sm whitespace-pre-wrap">
-                {row.answers.writing.text}
+      <section className="card p-6">
+        <div className="space-y-3 text-sm">
+          {(asses ?? []).map((a, idx) => (
+            <div key={idx} className="rounded-xl border border-black/10 bg-white/70 p-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-medium">{a.target_language} — CEFR {a.cefr_estimate}</div>
+                  <div className="text-xs text-neutral-500">{new Date(a.created_at).toLocaleString()}</div>
+                </div>
+                <div className="text-sm">Score: <b>{a.total_score}</b></div>
               </div>
+              {a.details && (
+                <pre className="mt-2 whitespace-pre-wrap text-xs text-neutral-700">
+                  {JSON.stringify(a.details, null, 2)}
+                </pre>
+              )}
             </div>
+          ))}
+          {(asses ?? []).length === 0 && (
+            <div className="text-neutral-500">No assessments found for this email.</div>
           )}
         </div>
-      ))}
-
-      {!data?.length && <div className="card p-6">No assessments.</div>}
-    </div>
-  )
-}
-
-function Box({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="rounded-xl border border-black/10 bg-white/70 p-3">
-      <div className="text-xs text-neutral-500">{title}</div>
-      <div className="text-lg font-semibold">{body}</div>
+      </section>
     </div>
   )
 }
