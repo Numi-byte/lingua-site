@@ -17,6 +17,15 @@ const RESOURCES: { key: Resource; label: string; tip?: string }[] = [
   { key: 'promotion_codes', label: 'Promotion Codes' },
 ]
 
+function buildListUrl(resource: Resource, limit: number, expand: string, startingAfter: string | null) {
+  const qs = new URLSearchParams()
+  qs.set('resource', resource)
+  qs.set('limit', String(limit))
+  if (expand.trim()) qs.set('expand', expand.trim())
+  if (startingAfter) qs.set('starting_after', startingAfter)
+  return `/api/admin/stripe/list?${qs.toString()}`
+}
+
 export default function StripeExplorer() {
   const [resource, setResource] = useState<Resource>('products')
   const [expand, setExpand] = useState<string>('')
@@ -26,14 +35,10 @@ export default function StripeExplorer() {
   const [error, setError] = useState<string | null>(null)
   const [startingAfter, setStartingAfter] = useState<string | null>(null)
 
-  const listUrl = useMemo(() => {
-    const u = new URL('/api/admin/stripe/list', window.location.origin)
-    u.searchParams.set('resource', resource)
-    u.searchParams.set('limit', String(limit))
-    if (expand.trim()) u.searchParams.set('expand', expand.trim())
-    if (startingAfter) u.searchParams.set('starting_after', startingAfter)
-    return u.toString()
-  }, [resource, limit, expand, startingAfter])
+  const listUrl = useMemo(
+    () => buildListUrl(resource, limit, expand, startingAfter),
+    [resource, limit, expand, startingAfter]
+  )
 
   async function fetchList(resetCursor = false) {
     try {
@@ -101,7 +106,6 @@ export default function StripeExplorer() {
               </div>
             </div>
 
-            {/* Compact tables for common resources, else JSON */}
             {resource === 'products' && <ProductsTable rows={data.data} />}
             {resource === 'prices' && <PricesTable rows={data.data} />}
             {resource === 'customers' && <CustomersTable rows={data.data} />}
