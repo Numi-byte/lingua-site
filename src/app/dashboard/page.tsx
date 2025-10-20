@@ -184,7 +184,7 @@ export default async function DashboardPage() {
 
           <div className="mt-4 grid gap-3">
             <Row label="Email" value={email} />
-            <UpdateNameForm defaultName={user.user_metadata?.full_name ?? ''} />
+            <UpdateNameForm initialName={user.user_metadata?.full_name ?? ''} />
             <div className="rounded-xl border border-black/10 bg-white/70 p-3">
               <div className="text-xs text-neutral-500 mb-1">Privacy</div>
               <div className="text-sm">Your data is protected. You can request deletion anytime.</div>
