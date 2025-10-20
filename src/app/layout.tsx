@@ -4,6 +4,8 @@ import { Plus_Jakarta_Sans } from 'next/font/google'
 import ToastHost from '@/components/Toast'
 import HeaderClient from '@/components/HeaderClient'
 import { I18nProvider } from './i18n/provider'
+import type { Metadata } from 'next'
+import { Suspense } from 'react'
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -11,25 +13,24 @@ const jakarta = Plus_Jakarta_Sans({
   display: 'swap',
 })
 
-export const metadata = {
-  title: 'Lingua By — Italian & German ',
-  description: 'Free assessment + free first class. 1:1 and group batches.',
+export const metadata: Metadata = {
+  title: 'Lingua By — Italian & German',
+  description: 'Free assessment + free first class. Group cohorts.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={jakarta.variable}>
       <body className="page-bg font-sans text-neutral-900">
-        {/* Client provider boundary */}
-        <I18nProvider>
-          {/* Client header that uses useI18n */}
-          <HeaderClient />
-
-          <main className="mx-auto max-w-6xl px-4 py-10">{children}</main>
-
-          <Footer />
-          <ToastHost />
-        </I18nProvider>
+        {/* Wrap anything that might use useSearchParams/usePathname in Suspense */}
+        <Suspense fallback={null}>
+          <I18nProvider>
+            <HeaderClient />
+            <main className="mx-auto max-w-6xl px-4 py-10">{children}</main>
+            <Footer />
+            <ToastHost />
+          </I18nProvider>
+        </Suspense>
       </body>
     </html>
   )

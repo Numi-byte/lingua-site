@@ -5,6 +5,7 @@ import ThemeToggle from '@/components/ThemeToggle'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
 import { useI18n } from '@/app/i18n/provider'
 import { CalendarClock, Compass, LayoutGrid, User } from 'lucide-react'
+import { Suspense } from 'react'
 
 export default function HeaderClient() {
   const { t } = useI18n()
@@ -25,7 +26,10 @@ export default function HeaderClient() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <LanguageSwitcher />
+          {/* Wrap LanguageSwitcher (uses useSearchParams) in Suspense */}
+          <Suspense fallback={null}>
+            <LanguageSwitcher />
+          </Suspense>
           <ThemeToggle />
           <Link href="/book" className="btn btn-primary hidden md:inline-flex">
             {t('book_free_class') || 'Book free class'}
