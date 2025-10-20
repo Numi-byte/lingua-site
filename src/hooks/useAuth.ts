@@ -1,22 +1,35 @@
 'use client'
+
 import { useEffect, useState } from 'react'
 import { supabaseBrowser } from '@/lib/supabaseClient'
+import type { User } from '@supabase/supabase-js'
+
+// Create a stable client outside the hook so we don't need it in deps
+const sb = supabaseBrowser()
 
 export function useAuth() {
-  const supabase = supabaseBrowser()
-  const [status, setStatus] = useState<'loading'|'authed'|'guest'>('loading')
-  const [email, setEmail] = useState<string | null>(null)
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let mounted = true
-    ;(async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!mounted) return
-      setEmail(user?.email ?? null)
-      setStatus(user ? 'authed' : 'guest')
-    })()
-    return () => { mounted = false }
-  }, [])
 
-  return { status, email, supabase }
+    sb.auth.getUser().then(({ data: { user } }) => {
+      if (mounted) {
+        setUser(user ?? null)
+        setLoading(false)
+      }
+    })
+
+    const { data: subscription } = sb.auth.onAuthStateChange((_evt, session) => {
+      if (mounted) setUser(session?.user ?? null)
+    })
+
+    return () => {
+      mounted = false
+      subscription.subscription.unsubscribe()
+    }
+  }, []) // no missing deps warning now
+
+  return { user, loading }
 }
