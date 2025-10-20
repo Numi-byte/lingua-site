@@ -3,9 +3,9 @@ import Link from 'next/link'
 import { useAuth } from '@/hooks/useAuth'
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
-  const { status } = useAuth()
-  if (status === 'loading') return <div className="card p-6">Checking session…</div>
-  if (status === 'guest') {
+  const { user, loading } = useAuth()
+  if (loading) return <div className="card p-6">Checking session…</div>
+  if (!user) {
     return (
       <div className="card p-6">
         <h2 className="text-lg font-semibold mb-2">Sign in required</h2>
