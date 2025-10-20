@@ -1,26 +1,78 @@
+/* Tailwind v4 entry */
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ======= Theme tokens ======= */
+@theme {
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+
+  /* brand palette */
+  --color-brand-50:  #f3f7ff;
+  --color-brand-100: #e6effe;
+  --color-brand-200: #cbdcfd;
+  --color-brand-300: #a3c0fc;
+  --color-brand-400: #6c98fa;
+  --color-brand-500: #3c6cf7;
+  --color-brand-600: #284fe5;
+  --color-brand-700: #213dc0;
+  --color-brand-800: #1e3699;
+  --color-brand-900: #1c327a;
+
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.5rem;
+
+  --shadow-soft: 0 10px 30px rgba(0,0,0,0.08);
+  --shadow-ring: 0 0 0 8px rgba(60,108,247,0.12);
+
+  --bg-radial-fade:
+    radial-gradient(1200px 600px at 80% -10%, rgba(60,108,247,.18), transparent 60%),
+    radial-gradient(800px 500px at 0% 10%, rgba(99,102,241,.12), transparent 60%);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ======= Global ======= */
+html, body { @apply antialiased; }
+::selection { background: rgba(60,108,247,.18); }
+
+.page-bg { @apply relative min-h-screen bg-[#fafafa]; }
+.page-bg::before {
+  content: '';
+  position: absolute; inset: 0; pointer-events: none;
+  background-image: var(--bg-radial-fade);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ======= Primitives ======= */
+.card {
+  @apply rounded-2xl border border-black/5 bg-white/70 backdrop-blur-xl shadow-soft;
+}
+.input {
+  @apply w-full rounded-lg border border-black/10 bg-white/80 px-3 py-2 outline-none
+         focus:border-brand-400 focus:ring-2 focus:ring-brand-200 transition;
+}
+.label {
+  @apply block text-sm font-medium text-neutral-700 mb-1;
+}
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold
+         transition shadow-soft;
+}
+.btn-primary {
+  @apply bg-brand-500 text-white hover:bg-brand-600 focus:outline-none focus:[box-shadow:var(--shadow-ring)];
+}
+.btn-ghost {
+  @apply bg-white text-neutral-900 border border-black/10 hover:bg-neutral-50;
+}
+.badge {
+  @apply inline-flex items-center rounded-full border border-black/10 bg-white/70 px-2 py-1 text-xs;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+/* ======= Dark mode ======= */
+:root[data-theme="dark"] body { background: #0f1115; color: #ffffffd9; }
+:root[data-theme="dark"] .card { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.08); }
+:root[data-theme="dark"] .btn-ghost { background: rgba(255,255,255,0.06); color: white; border-color: rgba(255,255,255,0.12); }
+:root[data-theme="dark"] .input { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); color: white; }
+:root[data-theme="dark"] .badge { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.12); }
+
+/* content width helper */
+.prose-wrap { @apply max-w-2xl text-neutral-700; }
+:root[data-theme="dark"] .prose-wrap { color: #cbd5e1; }
