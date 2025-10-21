@@ -13,9 +13,45 @@ const jakarta = Plus_Jakarta_Sans({
   display: 'swap',
 })
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://linguaby.org'
+const siteName = 'Lingua By'
+const siteTitle = 'Lingua By — Italian & German Cohorts'
+const siteDescription =
+  'Free assessment + free first class. Small-group cohorts (A1–B2) for Italian & German with a clear CEFR-aligned curriculum.'
+
 export const metadata: Metadata = {
-  title: 'Lingua By — Italian & German',
-  description: 'Free assessment + free first class. Group cohorts.',
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: siteTitle,
+    template: '%s — Lingua By',
+  },
+  description: siteDescription,
+  applicationName: siteName,
+  alternates: {
+    canonical: '/', // canonicalizes away query params like ?lang=
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  openGraph: {
+    type: 'website',
+    url: siteUrl,
+    siteName,
+    title: siteTitle,
+    description: siteDescription,
+    images: [{ url: '/og.png', width: 1200, height: 630, alt: 'Lingua By' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: siteTitle,
+    description: siteDescription,
+    images: ['/og.png'],
+  },
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
