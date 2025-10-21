@@ -1,22 +1,62 @@
+import Script from 'next/script'
 import Link from 'next/link'
 import { CalendarClock, CheckCircle2, GraduationCap, MessageSquare, ShieldCheck, Sparkles, Users } from 'lucide-react'
+import type { Metadata } from 'next'
 
-export const metadata = {
-  title: 'Lingua — Italian & German Cohorts • Free Assessment & Free Class',
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://linguaby.org'
+
+export const metadata: Metadata = {
+  title: 'Italian & German Cohorts • Free Assessment & Free Class',
   description:
     'Small-group Italian & German cohorts (A1–B2). Start with a free CEFR assessment and a free trial class. Native-level tutor, structured curriculum, friendly pacing.',
   openGraph: {
     title: 'Lingua — Italian & German Cohorts',
     description:
       'Small-group Italian & German cohorts (A1–B2). Free assessment + free class.',
-    url: '/',
     type: 'website',
   },
 }
 
 export default function HomePage() {
+  const orgJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: 'Lingua By',
+    url: siteUrl,
+    logo: `${siteUrl}/og.png`,
+    sameAs: [] as string[],
+  }
+
+  const courseJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    itemListElement: [
+      {
+        '@type': 'Course',
+        name: 'Italian A1–B2 Cohorts',
+        description: 'Structured cohort-based Italian classes with free assessment and first class.',
+        provider: { '@type': 'Organization', name: 'Lingua By', sameAs: siteUrl },
+      },
+      {
+        '@type': 'Course',
+        name: 'German A1–B2 Cohorts',
+        description: 'Structured cohort-based German classes with free assessment and first class.',
+        provider: { '@type': 'Organization', name: 'Lingua By', sameAs: siteUrl },
+      },
+      {
+        '@type': 'Course',
+        name: 'Weekend Pronunciation Workshop',
+        description: 'Intensive weekend workshop focused on pronunciation.',
+        provider: { '@type': 'Organization', name: 'Lingua By', sameAs: siteUrl },
+      },
+    ],
+  }
+
   return (
     <>
+      <Script id="org-jsonld" type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }} />
+      <Script id="courses-jsonld" type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(courseJsonLd) }} />
+
       {/* Announcement Bar */}
       <div className="border-b border-black/5 bg-white/70 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 py-2 text-center text-sm">
@@ -195,7 +235,7 @@ export default function HomePage() {
   )
 }
 
-/* ----------------- tiny components for cleanliness ----------------- */
+/* ----------------- tiny components ----------------- */
 
 function Step({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
